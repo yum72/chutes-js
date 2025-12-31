@@ -1,6 +1,6 @@
 {
   "name": "chutes-js",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "A lightweight, functional Node.js client for consuming Chutes.ai models (LLM, Image, Video, Audio).",
   "scripts": {
     "test": "node tests/test.js",
