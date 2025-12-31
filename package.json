@@ -38,8 +38,12 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": ""
+    "url": "git+https://github.com/yum72/chutes-js.git"
   },
+  "bugs": {
+    "url": "https://github.com/yum72/chutes-js/issues"
+  },
+  "homepage": "https://github.com/yum72/chutes-js#readme",
   "devDependencies": {
     "dotenv": "^17.2.3"
   }

@@ -252,15 +252,21 @@ Cancel/delete a job.
 
 ## Available Models
 
-| Type | Model ID | Method | Notes |
-|------|----------|--------|-------|
-| LLM | `zai-org/GLM-4.7-TEE` | `chat()` / `chatStream()` | OpenAI-compatible |
-| Image | `qwen-image` | `image()` | Text-to-image |
-| Video (I2V) | `wan-2-2-i2v-14b-fast` | `video()` | Requires `image` input |
-| Audio | `csm-1b` | `audio()` | Text-to-speech (ID based) |
-| Audio | `kokoro` | `audio()` | Text-to-speech (Voice based) |
+This SDK supports **all models** available on Chutes.ai. Below are some examples:
 
-Find more models at [chutes.ai/app](https://chutes.ai/app)
+| Type | Example Model | Method | Notes |
+|------|---------------|--------|-------|
+| LLM | `zai-org/GLM-4.7-TEE` | `chat()` / `chatStream()` | OpenAI-compatible |
+| Image | `qwen-image`, `FLUX.1-dev` | `image()` | Text-to-image |
+| Image | `hunyuan-image-3`, `hidream` | `invoke()` | Subdomain models |
+| Video | `wan-2-2-i2v-14b-fast` | `video()` | Image-to-video |
+| Video | `wan2.1-14b` | `invoke()` | Text-to-video |
+| Audio | `kokoro`, `csm-1b` | `audio()` | Text-to-speech |
+
+> **Tip**: Use `image()`, `video()`, and `audio()` for common models. Use `invoke()` for any model with a subdomain URL pattern.
+
+Browse all models at [chutes.ai/app](https://chutes.ai/app)
+
 
 ## Error Handling
 
