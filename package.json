@@ -1,0 +1,46 @@
+{
+  "name": "chutes-js",
+  "version": "1.0.0",
+  "description": "A lightweight, functional Node.js client for consuming Chutes.ai models (LLM, Image, Video, Audio).",
+  "scripts": {
+    "test": "node tests/test.js",
+    "test:video": "node tests/test-video.js",
+    "test:audio": "node tests/test-audio.js"
+  },
+  "type": "module",
+  "main": "./index.js",
+  "exports": {
+    ".": "./index.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "files": [
+    "src",
+    "index.js",
+    "README.md"
+  ],
+  "keywords": [
+    "chutes",
+    "ai",
+    "sdk",
+    "inference",
+    "llm",
+    "image-generation",
+    "video-generation",
+    "audio-generation",
+    "tts",
+    "text-to-speech",
+    "streaming",
+    "sse"
+  ],
+  "author": "",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": ""
+  },
+  "devDependencies": {
+    "dotenv": "^17.2.3"
+  }
+}

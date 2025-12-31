@@ -1,0 +1,26 @@
+# Dependencies
+node_modules/
+
+# Environment variables
+.env
+
+# Build outputs & artifacts
+test-output.png
+test-video-output.mp4
+tests/*.png
+tests/*.mp4
+tests/*.wav
+*.wav
+*.log
+
+# Editor & System
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Gemini artifacts
+.gemini/
+
+# Reference docs (internal)
+refrences/

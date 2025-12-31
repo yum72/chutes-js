@@ -1,0 +1,21 @@
+# Source control
+.git
+.gitignore
+
+# Environment variables
+.env
+.env.example
+
+# Testing
+tests/
+
+# Editor settings
+.vscode
+.idea
+
+# Gemeni artifacts
+.gemini
+*.md
+
+# Reference docs
+refrences/
