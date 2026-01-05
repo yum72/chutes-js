@@ -5,7 +5,6 @@ A lightweight, functional JavaScript SDK for consuming [Chutes.ai](https://chute
 - **Zero dependencies** – Built on native `fetch` and `AsyncGenerator`
 - **Streaming support** – First-class SSE parsing for chat/LLM responses
 - **Universal** – Works in Node.js 18+, Cloudflare Workers, and browsers
-- **TypeScript-ready** – Full JSDoc types for IntelliSense
 
 ## Installation
 
@@ -27,28 +26,27 @@ const response = await client.chat({
 });
 console.log(response.choices[0].message.content);
 
-// 2. Streaming Chat
-const stream = client.chatStream({
-  model: 'zai-org/GLM-4.7-TEE',
-  messages: [{ role: 'user', content: 'Tell me a joke' }]
+// 2. Image Generation (uses image.chutes.ai)
+const blob = await client.image({
+  model: 'qwen-image',
+  prompt: 'A beautiful sunset'
 });
 
-for await (const chunk of stream) {
-  process.stdout.write(chunk.choices[0]?.delta?.content || '');
+// 3. Video Generation (Hybrid: supports both Sync and Async)
+const result = await client.video({
+  model: 'wan-2-2-i2v-14b-fast',
+  prompt: 'A cat playing piano',
+  image: 'base64_data_here...'
+});
+
+// Check if we got a Blob (sync) or a Job ID (async)
+if (result instanceof Blob) {
+  await saveBlob(result, './video.mp4');
+} else {
+  // We got a Job ID, poll for status
+  const status = await client.getJobStatus(result.job_id);
+  console.log('Job Status:', status.state);
 }
-
-// 3. Invoke a deployed chute (subdomain-based)
-// Pattern: https://{chute}-{username}.chutes.ai/{path}
-const result = await client.invoke(
-  { name: 'Wan-2.2-I2V-14B-Fast', username: 'chutes' },
-  '/run',
-  { prompt: 'A cat playing piano', image_b64: '...' }
-);
-console.log('Job ID:', result.job_id);
-
-// 4. Check job status
-const status = await client.getJobStatus(result.job_id);
-console.log('Status:', status.state);
 ```
 
 ## API Reference
@@ -60,7 +58,10 @@ Creates a new Chutes client.
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
 | `apiKey` | `string` | *required* | Your Chutes API key |
-| `timeout` | `number` | `60000` | Request timeout in ms |
+| `timeout` | `number` | `60000` | Default timeout in ms (Note: Video/Audio have higher defaults) |
+
+> [!TIP]
+> You can access `client.endpoints` to see the base URLs being used by the client.
 
 ---
 
@@ -104,6 +105,9 @@ import { saveBlob } from 'chutes-js';
 await saveBlob(blob, './output.png');
 ```
 
+> [!IMPORTANT]
+> `saveBlob` is a Node.js utility. When using the SDK in browsers or Cloudflare Workers, handle the `Blob` response using native platform APIs.
+
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
 | `model` | `string` | *required* | Model ID (e.g., `qwen-image`) |
@@ -127,16 +131,22 @@ import { readFileSync } from 'fs';
 // For I2V models, provide a base64 image
 const imageBase64 = readFileSync('./input.png').toString('base64');
 
-const blob = await client.video({
+const result = await client.video({
   model: 'wan-2-2-i2v-14b-fast',
   prompt: 'A cat playing piano',
-  image: imageBase64,  // Required for I2V models
+  image: imageBase64,
   resolution: '480p',
   fps: 16,
   frames: 81
 });
 
-await saveBlob(blob, './output.mp4');
+if (result instanceof Blob) {
+  // 1. Synchronous: Video returned directly
+  await saveBlob(result, './output.mp4');
+} else {
+  // 2. Asynchronous: Job ID returned
+  console.log('Job started:', result.job_id);
+}
 ```
 
 | Option | Type | Default | Description |
@@ -152,6 +162,9 @@ await saveBlob(blob, './output.mp4');
 | `guidance_scale` | `number` | `1` | Guidance scale |
 | `guidance_scale_2` | `number` | `1` | Secondary guidance scale |
 | `negative_prompt` | `string` | - | Negative prompt |
+
+> [!NOTE]
+> Video generation has a default timeout of **5 minutes** (300,000ms).
 
 > **Note**: All methods accept additional parameters via spread (`...extra`) for model-specific options.
 
@@ -192,6 +205,9 @@ await saveBlob(audio2, './output.wav');
 | `voice` | `string` | - | Voice ID (Kokoro models) |
 | `speed` | `number` | `1.0` | Speaking speed (Kokoro models) |
 
+> [!NOTE]
+> Audio generation has a default timeout of **2 minutes** (120,000ms).
+
 ---
 
 ### Invoke Methods (subdomain-based chutes)
@@ -199,6 +215,8 @@ await saveBlob(audio2, './output.wav');
 For models using subdomain URLs (`chutes-{model}.chutes.ai`) not covered by built-in methods.
 
 > **Note**: Some image models use subdomain URLs instead of `image.chutes.ai`. Use `invoke()` for these.
+>
+> `invoke()` returns a `Blob` if the `Content-Type` is an image, `JSON` if it's `application/json`, or `string` otherwise.
 
 #### `client.invoke(target, path, payload)`
 
@@ -229,7 +247,11 @@ const video = await client.invoke(
 
 #### `client.invokeStream(target, path, payload)`
 
-For streaming responses from custom chutes.
+For streaming responses from custom chutes. Returns an `AsyncGenerator`.
+
+#### `parseSSE(stream)`
+
+The internal SSE parser is exported for custom streaming implementations.
 
 ---
 
