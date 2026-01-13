@@ -1,11 +1,13 @@
 {
   "name": "chutes-js",
-  "version": "1.0.2",
+  "version": "1.1.0",
   "description": "A lightweight, functional Node.js client for consuming Chutes.ai models (LLM, Image, Video, Audio).",
   "scripts": {
-    "test": "node tests/test.js",
-    "test:video": "node tests/test-video.js",
-    "test:audio": "node tests/test-audio.js"
+    "test": "node tests/test-unified-api.js",
+    "test:unit": "node tests/converters.test.js && node tests/normalizer.test.js",
+    "test:converters": "node tests/converters.test.js",
+    "test:normalizer": "node tests/normalizer.test.js",
+    "test:integration": "node tests/test-unified-api.js"
   },
   "type": "module",
   "main": "./index.js",

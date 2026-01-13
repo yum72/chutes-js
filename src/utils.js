@@ -5,7 +5,7 @@ import { ChutesError } from './errors.js';
  */
 export const ENDPOINTS = {
     LLM: 'https://llm.chutes.ai/v1',
-    IMAGE: 'https://image.chutes.ai/v1',
+    IMAGE: 'https://image.chutes.ai',
     API: 'https://api.chutes.ai'
 };
 

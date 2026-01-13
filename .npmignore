@@ -13,9 +13,12 @@ tests/
 .vscode
 .idea
 
-# Gemeni artifacts
+# Gemini artifacts
 .gemini
+
+# Planning/reference docs (but NOT README.md)
 *.md
+!README.md
 
 # Reference docs
 refrences/

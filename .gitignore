@@ -7,10 +7,12 @@ node_modules/
 # Build outputs & artifacts
 test-output.png
 test-video-output.mp4
+test-unified-*.png
+test-unified-*.mp4
+test-unified-*.wav
 tests/*.png
 tests/*.mp4
 tests/*.wav
-*.wav
 *.log
 
 # Editor & System
@@ -22,5 +24,3 @@ Thumbs.db
 # Gemini artifacts
 .gemini/
 
-# Reference docs (internal)
-refrences/

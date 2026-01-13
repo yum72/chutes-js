@@ -1,5 +1,9 @@
 import { constructLLMUrl, constructImageUrl, constructApiUrl, handleErrors, ENDPOINTS } from './utils.js';
 import { parseSSE } from './stream.js';
+import { normalizeParams, buildUrl } from './normalizer.js';
+import { IMAGE_MODELS, IMAGE_MODEL_ALIASES } from './models/image.js';
+import { VIDEO_MODELS, VIDEO_MODEL_ALIASES } from './models/video.js';
+import { AUDIO_MODELS, AUDIO_MODEL_ALIASES } from './models/audio.js';
 
 /**
  * @typedef {Object} ClientConfig
@@ -118,30 +122,48 @@ export const createClient = ({ apiKey, timeout = 60000 }) => {
     };
 
     // ========================================
-    // IMAGE METHODS (use image.chutes.ai)
+    // IMAGE METHODS (use image.chutes.ai or subdomain)
     // ========================================
 
     /**
-     * Generate an image
+     * Generate an image using unified parameters
      * @param {Object} options
-     * @param {string} options.model - Model ID (e.g., 'qwen-image')
+     * @param {string} options.model - Model ID (e.g., 'qwen-image', 'flux', 'hidream')
      * @param {string} options.prompt - Image prompt
-     * @param {number} [options.width=1024] - Image width
-     * @param {number} [options.height=1024] - Image height
-     * @param {number} [options.guidance_scale=7.5] - Guidance scale
-     * @param {number} [options.num_inference_steps=50] - Inference steps
-     * @param {Object} [options.extra] - Additional parameters
+     * @param {string} [options.aspectRatio] - Aspect ratio (e.g., '16:9', '1:1')
+     * @param {number} [options.width] - Image width (conflicts with aspectRatio)
+     * @param {number} [options.height] - Image height (conflicts with aspectRatio)
+     * @param {number} [options.steps] - Number of inference steps
+     * @param {number} [options.cfgScale] - Guidance scale
+     * @param {string} [options.negativePrompt] - Negative prompt
+     * @param {number|null} [options.seed] - Random seed
+     * @param {string|string[]} [options.images] - Reference images for editing models (base64 or URL)
      * @returns {Promise<Blob|Object>}
      */
-    const image = async ({ model, prompt, width = 1024, height = 1024, guidance_scale = 7.5, num_inference_steps = 50, ...extra }) => {
-        const url = 'https://image.chutes.ai/generate';
-        const { signal, clear } = createTimeout();
+    const image = async ({ model, ...userParams }) => {
+        // Normalize params based on model config
+        const { config, payload, resolvedModel } = await normalizeParams(
+            model,
+            userParams,
+            IMAGE_MODELS,
+            IMAGE_MODEL_ALIASES
+        );
+
+        // Build URL
+        const url = buildUrl(config);
+
+        // Add model ID for centralized API
+        if (config.type === 'centralized') {
+            payload.model = resolvedModel;
+        }
+
+        const { signal, clear } = createTimeout(config.timeout || timeout);
 
         try {
             const response = await fetch(url, {
                 method: 'POST',
                 headers: getHeaders(),
-                body: JSON.stringify({ model, prompt, width, height, guidance_scale, num_inference_steps, ...extra }),
+                body: JSON.stringify(payload),
                 signal
             });
 
@@ -162,40 +184,34 @@ export const createClient = ({ apiKey, timeout = 60000 }) => {
     // ========================================
 
     /**
-     * Generate a video
+     * Generate a video using unified parameters
      * @param {Object} options
-     * @param {string} options.model - Model slug (e.g., 'wan-2-2-i2v-14b-fast')
+     * @param {string} options.model - Model ID (e.g., 'wan-2-2-i2v-14b-fast', 'wan', 'i2v')
      * @param {string} options.prompt - Video prompt
-     * @param {string} [options.resolution='480p'] - Video resolution
-     * @param {number} [options.fps=16] - Frames per second
-     * @param {number} [options.frames=81] - Number of frames
-     * @param {number} [options.seed] - Random seed
-     * @param {boolean} [options.fast=true] - Use fast mode
-     * @param {number} [options.guidance_scale=1] - Guidance scale
-     * @param {number} [options.guidance_scale_2=1] - Secondary guidance scale
-     * @param {string} [options.negative_prompt] - Negative prompt
-     * @param {string} [options.image] - Base64 image for I2V models
-     * @param {Object} [options.extra] - Additional parameters
+     * @param {string} options.image - Reference image for I2V (base64 or URL)
+     * @param {string} [options.aspectRatio] - Aspect ratio (e.g., '16:9')
+     * @param {string} [options.resolution] - Video resolution ('480p', '720p')
+     * @param {number} [options.duration] - Duration in seconds (conflicts with frames)
+     * @param {number} [options.frames] - Number of frames (conflicts with duration)
+     * @param {number} [options.fps] - Frames per second
+     * @param {number} [options.cfgScale] - Guidance scale
+     * @param {string} [options.negativePrompt] - Negative prompt
+     * @param {number|null} [options.seed] - Random seed
      * @returns {Promise<Blob|Object>}
      */
-    const video = async ({ model, prompt, resolution = '480p', fps = 16, frames = 81, seed, fast = true, guidance_scale = 1, guidance_scale_2 = 1, negative_prompt, image, ...extra }) => {
-        const modelSlug = model.toLowerCase().replace(/[^a-z0-9]+/g, '-');
-        const url = `https://chutes-${modelSlug}.chutes.ai/generate`;
-        const { signal, clear } = createTimeout(300000); // 5 min timeout for video
+    const video = async ({ model, ...userParams }) => {
+        // Normalize params based on model config
+        const { config, payload } = await normalizeParams(
+            model,
+            userParams,
+            VIDEO_MODELS,
+            VIDEO_MODEL_ALIASES
+        );
 
-        const payload = {
-            prompt,
-            resolution,
-            fps,
-            frames,
-            fast,
-            guidance_scale,
-            guidance_scale_2,
-            ...(seed !== undefined && { seed }),
-            ...(negative_prompt && { negative_prompt }),
-            ...(image && { image }),
-            ...extra
-        };
+        // Build URL
+        const url = buildUrl(config);
+        const timeoutMs = config.timeout || 300000;
+        const { signal, clear } = createTimeout(timeoutMs);
 
         try {
             const response = await fetch(url, {
@@ -222,30 +238,29 @@ export const createClient = ({ apiKey, timeout = 60000 }) => {
     // ========================================
 
     /**
-     * Generate audio (Text-to-Speech)
+     * Generate audio (Text-to-Speech) using unified parameters
      * @param {Object} options
-     * @param {string} options.model - Model slug (e.g., 'kokoro', 'csm-1b')
+     * @param {string} options.model - Model ID (e.g., 'kokoro', 'csm-1b', 'tts')
      * @param {string} options.text - Text to speak
-     * @param {number} [options.speaker] - Speaker ID (for CSM models)
-     * @param {number} [options.max_duration_ms] - Max duration (for CSM models)
-     * @param {number} [options.speed=1] - Speed (for Kokoro models)
-     * @param {string} [options.voice] - Voice ID (for Kokoro models)
-     * @param {Object} [options.extra] - Additional parameters
+     * @param {string} [options.voice] - Voice ID (for Kokoro)
+     * @param {number} [options.speed] - Playback speed (for Kokoro)
+     * @param {number} [options.speaker] - Speaker ID (for CSM)
+     * @param {number} [options.maxDuration] - Max duration in seconds (for CSM)
      * @returns {Promise<Blob|Object>}
      */
-    const audio = async ({ model, text, speaker, max_duration_ms, speed, voice, ...extra }) => {
-        const modelSlug = model.toLowerCase().replace(/[^a-z0-9]+/g, '-');
-        const url = `https://chutes-${modelSlug}.chutes.ai/speak`;
-        const { signal, clear } = createTimeout(120000); // 2 min timeout for audio
+    const audio = async ({ model, ...userParams }) => {
+        // Normalize params based on model config
+        const { config, payload } = await normalizeParams(
+            model,
+            userParams,
+            AUDIO_MODELS,
+            AUDIO_MODEL_ALIASES
+        );
 
-        const payload = {
-            text,
-            ...(speaker !== undefined && { speaker }),
-            ...(max_duration_ms !== undefined && { max_duration_ms }),
-            ...(speed !== undefined && { speed }),
-            ...(voice !== undefined && { voice }),
-            ...extra
-        };
+        // Build URL
+        const url = buildUrl(config);
+        const timeoutMs = config.timeout || 120000;
+        const { signal, clear } = createTimeout(timeoutMs);
 
         try {
             const response = await fetch(url, {

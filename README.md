@@ -5,6 +5,7 @@ A lightweight, functional JavaScript SDK for consuming [Chutes.ai](https://chute
 - **Zero dependencies** – Built on native `fetch` and `AsyncGenerator`
 - **Streaming support** – First-class SSE parsing for chat/LLM responses
 - **Universal** – Works in Node.js 18+, Cloudflare Workers, and browsers
+- **Unified API** – Normalized parameters across all models with auto-translation
 
 ## Installation
 
@@ -19,34 +20,41 @@ import { createClient, saveBlob } from 'chutes-js';
 
 const client = createClient({ apiKey: process.env.CHUTES_API_KEY });
 
-// 1. Chat Completion (uses llm.chutes.ai)
+// 1. Chat Completion (OpenAI-compatible)
 const response = await client.chat({
-  model: 'zai-org/GLM-4.7-TEE',
+  model: 'deepseek-ai/DeepSeek-V3-0324',
   messages: [{ role: 'user', content: 'Hello!' }]
 });
 console.log(response.choices[0].message.content);
 
-// 2. Image Generation (uses image.chutes.ai)
-const blob = await client.image({
-  model: 'qwen-image',
-  prompt: 'A beautiful sunset'
+// 2. Image Generation (unified params)
+const image = await client.image({
+  model: 'flux',                // alias for FLUX.1-schnell
+  prompt: 'A beautiful sunset over mountains',
+  aspectRatio: '16:9',          // auto-converted to width/height
+  steps: 25,
+  cfgScale: 7
 });
+await saveBlob(image, './sunset.png');
 
-// 3. Video Generation (Hybrid: supports both Sync and Async)
-const result = await client.video({
-  model: 'wan-2-2-i2v-14b-fast',
-  prompt: 'A cat playing piano',
-  image: 'base64_data_here...'
+// 3. Video Generation (I2V with URL auto-fetch)
+const video = await client.video({
+  model: 'wan',                              // alias for wan-2-2-i2v-14b-fast
+  prompt: 'A cat playing piano smoothly',
+  image: 'https://example.com/cat.jpg',      // URL auto-fetched to base64
+  duration: 5,                               // seconds → frames via fps
+  aspectRatio: '16:9'
 });
+await saveBlob(video, './cat-piano.mp4');
 
-// Check if we got a Blob (sync) or a Job ID (async)
-if (result instanceof Blob) {
-  await saveBlob(result, './video.mp4');
-} else {
-  // We got a Job ID, poll for status
-  const status = await client.getJobStatus(result.job_id);
-  console.log('Job Status:', status.state);
-}
+// 4. Audio Generation (Text-to-Speech)
+const audio = await client.audio({
+  model: 'tts',                 // alias for kokoro
+  text: 'Hello, welcome to Chutes!',
+  voice: 'af_heart',
+  speed: 1.0
+});
+await saveBlob(audio, './welcome.wav');
 ```
 
 ## API Reference
@@ -58,7 +66,7 @@ Creates a new Chutes client.
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
 | `apiKey` | `string` | *required* | Your Chutes API key |
-| `timeout` | `number` | `60000` | Default timeout in ms (Note: Video/Audio have higher defaults) |
+| `timeout` | `number` | `60000` | Default timeout in ms (Video: 5min, Audio: 2min) |
 
 > [!TIP]
 > You can access `client.endpoints` to see the base URLs being used by the client.
@@ -73,8 +81,8 @@ OpenAI-compatible chat completion.
 
 ```javascript
 const response = await client.chat({
-  model: 'zai-org/GLM-4.7-TEE',
-  messages: [{ role: 'user', content: 'Hello!' }]
+  model: 'deepseek-ai/DeepSeek-V3-0324',
+  messages: [{ role: 'user', content: 'Explain quantum computing' }]
 });
 ```
 
@@ -84,170 +92,380 @@ Streaming chat completion. Returns an async generator.
 
 ```javascript
 for await (const chunk of client.chatStream({ model, messages })) {
-  console.log(chunk.choices[0]?.delta?.content);
+  process.stdout.write(chunk.choices[0]?.delta?.content || '');
 }
 ```
-
-### Image Methods (via `image.chutes.ai`)
-
-#### `client.image(options)`
-
-Generate an image.
-
-```javascript
-const blob = await client.image({
-  model: 'qwen-image',
-  prompt: 'A beautiful sunset over mountains'
-});
-
-// Save to file (Node.js)
-import { saveBlob } from 'chutes-js';
-await saveBlob(blob, './output.png');
-```
-
-> [!IMPORTANT]
-> `saveBlob` is a Node.js utility. When using the SDK in browsers or Cloudflare Workers, handle the `Blob` response using native platform APIs.
-
-| Option | Type | Default | Description |
-|--------|------|---------|-------------|
-| `model` | `string` | *required* | Model ID (e.g., `qwen-image`) |
-| `prompt` | `string` | *required* | Image generation prompt |
-| `width` | `number` | `1024` | Image width |
-| `height` | `number` | `1024` | Image height |
-| `guidance_scale` | `number` | `7.5` | Guidance scale |
-| `num_inference_steps` | `number` | `50` | Inference steps |
 
 ---
 
-### Video Methods (via `chutes-{model}.chutes.ai`)
+### Image Methods
+
+The SDK provides a **unified API** for image generation. Parameters are automatically translated to each model's native format.
+
+#### `client.image(options)`
+
+Generate an image using unified parameters.
+
+```javascript
+import { saveBlob } from 'chutes-js';
+
+// Basic usage
+const blob = await client.image({
+  model: 'flux',
+  prompt: 'A cyberpunk city at night'
+});
+await saveBlob(blob, './cyberpunk.png');
+
+// With all options
+const blob2 = await client.image({
+  model: 'qwen-image',
+  prompt: 'A serene Japanese garden',
+  aspectRatio: '16:9',        // or use width/height directly
+  steps: 50,
+  cfgScale: 7.5,
+  negativePrompt: 'blurry, low quality',
+  seed: 42
+});
+
+// Image editing (requires reference images)
+const edited = await client.image({
+  model: 'qwen-edit',
+  prompt: 'Add a rainbow to the sky',
+  images: ['https://example.com/photo.jpg'],  // URLs auto-fetched
+  aspectRatio: '1:1'
+});
+```
+
+> [!IMPORTANT]
+> `saveBlob` is a Node.js utility. In browsers or Cloudflare Workers, handle the `Blob` using platform APIs.
+
+#### Parameters
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `model` | `string` | **Required.** Model ID or alias (e.g., `'flux'`, `'qwen-image'`, `'hidream'`) |
+| `prompt` | `string` | **Required.** Image generation prompt |
+| `aspectRatio` | `string` | Aspect ratio (e.g., `'16:9'`, `'1:1'`, `'9:16'`). Auto-converts to width/height. Conflicts with `width`/`height`. |
+| `width` | `number` | Image width in pixels (default: 1024) |
+| `height` | `number` | Image height in pixels (default: 1024) |
+| `steps` | `number` | Number of inference steps (default varies by model: 25-50) |
+| `cfgScale` | `number` | Guidance scale (default varies by model: 4-7.5) |
+| `negativePrompt` | `string` | Negative prompt for content to avoid |
+| `seed` | `number\|null` | Random seed for reproducibility |
+| `images` | `string\|string[]` | Reference images for editing models (base64 or URL). URLs are auto-fetched. |
+
+#### Alternative: Using `invoke()` for Raw API Access
+
+For direct API access without parameter normalization:
+
+```javascript
+// Subdomain model (HiDream)
+const image = await client.invoke(
+  { name: 'hidream', username: 'chutes' },
+  '/generate',
+  { prompt: 'Cyberpunk city', resolution: '1024x1024', guidance_scale: 5 }
+);
+
+// Centralized model (requires model in payload)
+const image2 = await client.invoke(
+  'image.chutes.ai',
+  '/generate',
+  { model: 'qwen-image', prompt: 'A sunset', width: 1024, height: 1024 }
+);
+```
+
+<details>
+<summary><strong>Supported Image Models (18 models)</strong></summary>
+
+#### Centralized API Models (`image.chutes.ai`)
+
+| Model | Aliases | Notes |
+|-------|---------|-------|
+| `qwen-image` | `qwen` | Qwen image generation |
+| `Qwen-Image-2512` | `qwen-2512` | Qwen 2512 variant |
+| `FLUX.1-schnell` | `flux`, `flux-schnell` | Fast FLUX model |
+| `JuggernautXL` | `juggernaut` | Juggernaut XL |
+| `JuggernautXL-Ragnarok` | `juggernaut-ragnarok` | Ragnarok variant |
+| `iLustMix` | - | Illustration style |
+| `chroma` | - | Chroma model |
+| `Illustrij` | - | Illustration focused |
+| `Animij` | - | Anime style |
+| `HassakuXL` | - | Hassaku XL |
+| `NovaFurryXL` | - | Furry art style |
+| `stabilityai/stable-diffusion-xl-base-1.0` | `sdxl` | Stable Diffusion XL |
+| `Lykon/dreamshaper-xl-1-0` | `dreamshaper` | DreamShaper XL |
+| `diagonalge/Booba` | - | Community model |
+| `diagonalge/ConstShaper` | - | Community model |
+
+#### Subdomain API Models
+
+| Model | Aliases | Notes |
+|-------|---------|-------|
+| `hidream` | - | HiDream (uses resolution enum) |
+| `hunyuan-image-3` | `hunyuan` | Hunyuan Image 3 (uses size string) |
+| `z-image-turbo` | `z-turbo` | Z-Image Turbo (fast generation) |
+
+#### Image Editing Models (require `images` parameter)
+
+| Model | Aliases | Notes |
+|-------|---------|-------|
+| `Qwen-Image-Edit-2511` | `qwen-edit-2511` | Qwen image editing (latest) |
+| `qwen-image-edit-2509` | `qwen-edit` | Qwen image editing |
+
+</details>
+
+---
+
+### Video Methods
+
+Generate videos with unified parameters. The SDK handles image URL fetching and frame calculation automatically.
 
 #### `client.video(options)`
 
-Generate a video. I2V (Image-to-Video) models require a base64 image input.
+Generate a video using unified parameters.
 
 ```javascript
 import { readFileSync } from 'fs';
+import { saveBlob } from 'chutes-js';
 
-// For I2V models, provide a base64 image
+// Using image URL (auto-fetched to base64)
+const video = await client.video({
+  model: 'wan',                              // alias for wan-2-2-i2v-14b-fast
+  prompt: 'A cat playing piano elegantly',
+  image: 'https://example.com/cat.jpg',      // URL auto-fetched
+  duration: 5,                               // 5 seconds
+  aspectRatio: '16:9'
+});
+await saveBlob(video, './output.mp4');
+
+// Using local file (base64)
 const imageBase64 = readFileSync('./input.png').toString('base64');
-
-const result = await client.video({
-  model: 'wan-2-2-i2v-14b-fast',
-  prompt: 'A cat playing piano',
+const video2 = await client.video({
+  model: 'i2v',
+  prompt: 'Ocean waves crashing on rocks',
   image: imageBase64,
-  resolution: '480p',
+  frames: 81,                   // or use duration in seconds
   fps: 16,
-  frames: 81
+  cfgScale: 1,
+  cfgScale2: 1,
+  negativePrompt: 'blurry, static',
+  seed: 12345
 });
 
-if (result instanceof Blob) {
-  // 1. Synchronous: Video returned directly
-  await saveBlob(result, './output.mp4');
+// Check for async job (some models return job ID)
+if (video2 instanceof Blob) {
+  await saveBlob(video2, './ocean.mp4');
 } else {
-  // 2. Asynchronous: Job ID returned
-  console.log('Job started:', result.job_id);
+  console.log('Job started:', video2.job_id);
+  // Poll with client.getJobStatus(video2.job_id)
 }
 ```
 
-| Option | Type | Default | Description |
-|--------|------|---------|-------------|
-| `model` | `string` | *required* | Model slug (e.g., `wan-2-2-i2v-14b-fast`) |
-| `prompt` | `string` | *required* | Video generation prompt |
-| `image` | `string` | - | Base64 image (required for I2V models) |
-| `resolution` | `string` | `'480p'` | Video resolution |
-| `fps` | `number` | `16` | Frames per second |
-| `frames` | `number` | `81` | Number of frames |
-| `seed` | `number` | - | Random seed for reproducibility |
-| `fast` | `boolean` | `true` | Use fast generation mode |
-| `guidance_scale` | `number` | `1` | Guidance scale |
-| `guidance_scale_2` | `number` | `1` | Secondary guidance scale |
-| `negative_prompt` | `string` | - | Negative prompt |
+#### Parameters
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `model` | `string` | **Required.** Model ID or alias (e.g., `'wan'`, `'i2v'`) |
+| `prompt` | `string` | **Required.** Video generation prompt |
+| `image` | `string` | **Required.** Reference image (base64 or URL). URLs are auto-fetched. |
+| `aspectRatio` | `string` | Aspect ratio, converts to resolution (e.g., `'16:9'` → `'480p'`) |
+| `resolution` | `string` | Video resolution (`'480p'`, `'720p'`) |
+| `duration` | `number` | Duration in seconds. Converted to frames via fps. Conflicts with `frames`. |
+| `frames` | `number` | Number of frames (default: 81, range: 21-140) |
+| `fps` | `number` | Frames per second (default: 16, range: 16-24) |
+| `cfgScale` | `number` | Primary guidance scale (default: 1) |
+| `cfgScale2` | `number` | Secondary guidance scale (default: 1) |
+| `negativePrompt` | `string` | Negative prompt (has sensible default) |
+| `seed` | `number\|null` | Random seed for reproducibility |
+| `fast` | `boolean` | Use fast generation mode (default: true) |
 
 > [!NOTE]
 > Video generation has a default timeout of **5 minutes** (300,000ms).
 
-> **Note**: All methods accept additional parameters via spread (`...extra`) for model-specific options.
+#### Alternative: Using `invoke()` for Raw API Access
+
+```javascript
+const video = await client.invoke(
+  { name: 'wan-2-2-i2v-14b-fast', username: 'chutes' },
+  '/generate',
+  {
+    prompt: 'A dog running',
+    image: imageBase64,
+    resolution: '480p',
+    fps: 16,
+    frames: 81,
+    guidance_scale: 1,
+    guidance_scale_2: 1
+  }
+);
+```
+
+<details>
+<summary><strong>Supported Video Models (1 model)</strong></summary>
+
+| Model | Aliases | Type | Notes |
+|-------|---------|------|-------|
+| `wan-2-2-i2v-14b-fast` | `wan`, `i2v`, `wan-i2v` | Image-to-Video | Requires reference image |
+
+</details>
 
 ---
 
-### Audio Methods (via `chutes-{model}.chutes.ai/speak`)
+### Audio Methods
+
+Generate audio (Text-to-Speech) with unified parameters.
 
 #### `client.audio(options)`
 
-Generate audio (Text-to-Speech). Supported parameters vary by model.
+Generate audio using unified parameters.
 
 ```javascript
-// Example for CSM-1B model
-const audio1 = await client.audio({
-  model: 'csm-1b',
-  text: 'Hello world!',
-  speaker: 1,
-  max_duration_ms: 10000
-});
+import { saveBlob } from 'chutes-js';
 
-// Example for Kokoro model
-const audio2 = await client.audio({
-  model: 'kokoro',
-  text: 'Hello world!',
-  voice: 'af_heart',
+// Kokoro TTS (50+ voices)
+const audio = await client.audio({
+  model: 'tts',                 // alias for kokoro
+  text: 'Hello, welcome to Chutes AI!',
+  voice: 'af_heart',            // American female
   speed: 1.0
 });
+await saveBlob(audio, './welcome.wav');
 
-await saveBlob(audio2, './output.wav');
+// CSM-1B (conversational)
+const audio2 = await client.audio({
+  model: 'csm',
+  text: 'This is a test of the CSM model.',
+  speaker: 0,
+  maxDuration: 15              // 15 seconds (auto-converted to ms)
+});
+await saveBlob(audio2, './csm-test.wav');
 ```
 
-| Option | Type | Default | Description |
-|--------|------|---------|-------------|
-| `model` | `string` | *required* | Model slug (e.g., `kokoro`, `csm-1b`) |
-| `text` | `string` | *required* | Text to speak |
-| `speaker` | `number` | - | Speaker ID (CSM models) |
-| `max_duration_ms` | `number` | - | Max duration in ms (CSM models) |
-| `voice` | `string` | - | Voice ID (Kokoro models) |
-| `speed` | `number` | `1.0` | Speaking speed (Kokoro models) |
+#### Parameters
+
+**Common:**
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `model` | `string` | **Required.** Model ID or alias (e.g., `'tts'`, `'kokoro'`, `'csm'`) |
+| `text` | `string` | **Required.** Text to speak |
+
+**Kokoro-specific:**
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `voice` | `string` | Voice ID (default: `'af_heart'`). See voice list below. |
+| `speed` | `number` | Playback speed (default: 1.0, range: 0.1-3.0) |
+
+**CSM-specific:**
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `speaker` | `number` | Speaker ID (0 or 1) |
+| `maxDuration` | `number` | Max duration in **seconds** (auto-converted to ms) |
+| `maxDurationMs` | `number` | Max duration in milliseconds directly |
+| `context` | `array` | Conversation context for multi-turn |
 
 > [!NOTE]
 > Audio generation has a default timeout of **2 minutes** (120,000ms).
 
+#### Alternative: Using `invoke()` for Raw API Access
+
+```javascript
+// Kokoro via invoke
+const audio = await client.invoke(
+  { name: 'kokoro', username: 'chutes' },
+  '/speak',
+  { text: 'Hello world', voice: 'af_heart', speed: 1.0 }
+);
+
+// CSM via invoke
+const audio2 = await client.invoke(
+  { name: 'csm-1b', username: 'chutes' },
+  '/speak',
+  { text: 'Hello', speaker: 0, max_duration_ms: 10000 }
+);
+```
+
+<details>
+<summary><strong>Supported Audio Models (2 models)</strong></summary>
+
+| Model | Aliases | Notes |
+|-------|---------|-------|
+| `kokoro` | `tts` | 50+ voices, fast TTS |
+| `csm-1b` | `csm` | Conversational speech model |
+
+</details>
+
+<details>
+<summary><strong>Kokoro Voice List (50+ voices)</strong></summary>
+
+**American English - Female (`af_*`)**
+- `af_heart` (default), `af_alloy`, `af_aoede`, `af_bella`, `af_jessica`, `af_kore`, `af_nicole`, `af_nova`, `af_river`, `af_sarah`, `af_sky`
+
+**American English - Male (`am_*`)**
+- `am_adam`, `am_echo`, `am_eric`, `am_fenrir`, `am_liam`, `am_michael`, `am_onyx`, `am_puck`, `am_santa`
+
+**British English - Female (`bf_*`)**
+- `bf_alice`, `bf_emma`, `bf_isabella`, `bf_lily`
+
+**British English - Male (`bm_*`)**
+- `bm_daniel`, `bm_fable`, `bm_george`, `bm_lewis`
+
+**Spanish (`ef_*`, `em_*`)**
+- `ef_dora`, `em_alex`, `em_santa`
+
+**French (`ff_*`)**
+- `ff_siwis`
+
+**Hindi (`hf_*`, `hm_*`)**
+- `hf_alpha`, `hf_beta`, `hm_omega`, `hm_psi`
+
+**Italian (`if_*`, `im_*`)**
+- `if_sara`, `im_nicola`
+
+**Japanese (`jf_*`, `jm_*`)**
+- `jf_alpha`, `jf_gongitsune`, `jf_nezumi`, `jf_tebukuro`, `jm_kumo`
+
+**Portuguese (`pf_*`, `pm_*`)**
+- `pf_dora`, `pm_alex`, `pm_santa`
+
+**Chinese (`zf_*`, `zm_*`)**
+- `zf_xiaobei`, `zf_xiaoni`, `zf_xiaoxiao`, `zf_xiaoyi`, `zm_yunjian`, `zm_yunxi`, `zm_yunxia`, `zm_yunyang`
+
+</details>
+
 ---
 
-### Invoke Methods (subdomain-based chutes)
+### Invoke Methods (Advanced)
 
-For models using subdomain URLs (`chutes-{model}.chutes.ai`) not covered by built-in methods.
-
-> **Note**: Some image models use subdomain URLs instead of `image.chutes.ai`. Use `invoke()` for these.
->
-> `invoke()` returns a `Blob` if the `Content-Type` is an image, `JSON` if it's `application/json`, or `string` otherwise.
+For models not covered by built-in methods, or when you need raw API access.
 
 #### `client.invoke(target, path, payload)`
 
 ```javascript
 // Pattern: https://{name}-{username}.chutes.ai/{path}
 
-// Example 1: Subdomain image model (Hunyuan)
-const image = await client.invoke(
-  { name: 'hunyuan-image-3', username: 'chutes' },
+// Subdomain model
+const result = await client.invoke(
+  { name: 'custom-model', username: 'myuser' },
   '/generate',
-  { prompt: 'A dog running on grass', size: '1024x1024' }
+  { prompt: 'Hello', ...otherParams }
 );
 
-// Example 2: Subdomain image model (HiDream)
-const image2 = await client.invoke(
-  { name: 'hidream', username: 'chutes' },
-  '/generate',
-  { prompt: 'Cyberpunk city', resolution: '1024x1024', guidance_scale: 5 }
-);
-
-// Example 3: Text-to-Video (Wan 2.1)
-const video = await client.invoke(
-  { name: 'wan2-1-14b', username: 'chutes' },
-  '/text2video',
-  { prompt: 'Ocean waves crashing', fps: 24, frames: 81 }
+// Direct URL
+const result2 = await client.invoke(
+  'https://custom-endpoint.chutes.ai',
+  '/api/v1/generate',
+  { prompt: 'Hello' }
 );
 ```
 
+Returns: `Blob` (if image/video/audio), `Object` (if JSON), or `string` otherwise.
+
 #### `client.invokeStream(target, path, payload)`
 
-For streaming responses from custom chutes. Returns an `AsyncGenerator`.
+For streaming responses. Returns an `AsyncGenerator`.
 
 #### `parseSSE(stream)`
 
@@ -257,9 +475,9 @@ The internal SSE parser is exported for custom streaming implementations.
 
 ### Job Methods (via `api.chutes.ai`)
 
-#### `client.getJobStatus(jobId)`
+For long-running async jobs.
 
-Check status of a long-running job.
+#### `client.getJobStatus(jobId)`
 
 ```javascript
 const status = await client.getJobStatus('job_abc123');
@@ -268,42 +486,69 @@ const status = await client.getJobStatus('job_abc123');
 
 #### `client.deleteJob(jobId)`
 
-Cancel/delete a job.
+Cancel or delete a job.
 
 ---
-
-## Available Models
-
-This SDK supports **all models** available on Chutes.ai. Below are some examples:
-
-| Type | Example Model | Method | Notes |
-|------|---------------|--------|-------|
-| LLM | `zai-org/GLM-4.7-TEE` | `chat()` / `chatStream()` | OpenAI-compatible |
-| Image | `qwen-image`, `FLUX.1-dev` | `image()` | Text-to-image |
-| Image | `hunyuan-image-3`, `hidream` | `invoke()` | Subdomain models |
-| Video | `wan-2-2-i2v-14b-fast` | `video()` | Image-to-video |
-| Video | `wan2.1-14b` | `invoke()` | Text-to-video |
-| Audio | `kokoro`, `csm-1b` | `audio()` | Text-to-speech |
-
-> **Tip**: Use `image()`, `video()`, and `audio()` for common models. Use `invoke()` for any model with a subdomain URL pattern.
-
-Browse all models at [chutes.ai/app](https://chutes.ai/app)
-
 
 ## Error Handling
 
 ```javascript
-import { createClient, ChutesError } from 'chutes-js';
+import { createClient, ChutesError, ValidationError } from 'chutes-js';
 
 try {
-  await client.chat({ ... });
+  await client.image({
+    model: 'flux',
+    prompt: 'A sunset',
+    steps: 500  // exceeds max
+  });
 } catch (e) {
-  if (e instanceof ChutesError) {
+  if (e instanceof ValidationError) {
+    // Parameter validation failed
+    console.log('Validation error:', e.message);
+    // e.g., "steps exceeds maximum value of 100"
+  } else if (e instanceof ChutesError) {
+    // API error
     console.log('Status:', e.status);  // 429 = rate limited
     console.log('Body:', e.body);      // Raw error response
   }
 }
 ```
+
+| Error Class | When |
+|-------------|------|
+| `ValidationError` | Invalid parameters (missing required, out of range, conflicts) |
+| `ChutesError` | API returned an error (auth, rate limit, server error) |
+
+---
+
+## Exports
+
+```javascript
+import {
+  // Client
+  createClient,
+  
+  // Errors
+  ChutesError,
+  ValidationError,
+  
+  // Utilities
+  parseSSE,
+  saveBlob,
+  
+  // Model configs (advanced)
+  IMAGE_MODELS,
+  IMAGE_MODEL_ALIASES,
+  VIDEO_MODELS,
+  VIDEO_MODEL_ALIASES,
+  AUDIO_MODELS,
+  AUDIO_MODEL_ALIASES,
+  ALL_MODELS,
+  ALL_ALIASES
+} from 'chutes-js';
+```
+
+---
 
 ## License
 
