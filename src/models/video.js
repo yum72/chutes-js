@@ -18,8 +18,8 @@ export const VIDEO_MODELS = /** @type {const} */ ({
       prompt: { required: true, target: 'prompt', maxLength: 16384, minLength: 3 },
       image: { 
         required: true, 
-        target: 'image',
-        converter: 'normalizeImage'
+        target: 'image'
+        // Don't convert - API accepts both URL and base64 directly
       },
       negativePrompt: { 
         target: 'negative_prompt',
