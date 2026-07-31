@@ -20,7 +20,8 @@
   "files": [
     "src",
     "index.js",
-    "README.md"
+    "README.md",
+    "LICENSE"
   ],
   "keywords": [
     "chutes",
@@ -36,7 +37,7 @@
     "streaming",
     "sse"
   ],
-  "author": "",
+  "author": "Hamza Rahman",
   "license": "MIT",
   "repository": {
     "type": "git",
