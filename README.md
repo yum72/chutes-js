@@ -2,6 +2,14 @@
 
 A lightweight, functional JavaScript SDK for consuming [Chutes.ai](https://chutes.ai) APIs.
 
+**Status:** maintained · published on [npm](https://www.npmjs.com/package/chutes-js) · Node 18+
+
+Chutes exposes text, image, video and audio models across three different hosts,
+with parameters that differ per model: some want `width` and `height`, others an
+aspect ratio, others a frame count where you were thinking in seconds. This SDK
+puts one set of parameters over all of them and translates per model, so
+switching models is a one-line change rather than a rewrite of the call.
+
 - **Zero dependencies** – Built on native `fetch` and `AsyncGenerator`
 - **Streaming support** – First-class SSE parsing for chat/LLM responses
 - **Universal** – Works in Node.js 18+, Cloudflare Workers, and browsers
@@ -22,7 +30,7 @@ const client = createClient({ apiKey: process.env.CHUTES_API_KEY });
 
 // 1. Chat Completion (OpenAI-compatible)
 const response = await client.chat({
-  model: 'deepseek-ai/DeepSeek-V3-0324',
+  model: 'deepseek-ai/DeepSeek-V3.2-TEE',
   messages: [{ role: 'user', content: 'Hello!' }]
 });
 console.log(response.choices[0].message.content);
@@ -81,7 +89,7 @@ OpenAI-compatible chat completion.
 
 ```javascript
 const response = await client.chat({
-  model: 'deepseek-ai/DeepSeek-V3-0324',
+  model: 'deepseek-ai/DeepSeek-V3.2-TEE',
   messages: [{ role: 'user', content: 'Explain quantum computing' }]
 });
 ```
@@ -95,6 +103,24 @@ for await (const chunk of client.chatStream({ model, messages })) {
   process.stdout.write(chunk.choices[0]?.delta?.content || '');
 }
 ```
+
+#### `client.models()`
+
+Lists the LLM models your key can currently reach.
+
+```javascript
+const models = await client.models();
+for (const m of models) {
+  console.log(m.id, m.context_length, m.input_modalities);
+}
+// Qwen/Qwen3.5-397B-A17B-TEE  262144  [ 'text', 'image' ]
+// deepseek-ai/DeepSeek-V3.2-TEE  131072  [ 'text' ]
+```
+
+Worth calling instead of hardcoding an ID. Chutes retires and renames models, and
+a request for one that has gone fails with `404 model not found`. The catalogue
+has moved to TEE variants, so IDs that worked earlier in 2026 no longer resolve.
+Each entry also carries `pricing` and `max_output_length`.
 
 ---
 
