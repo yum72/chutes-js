@@ -96,6 +96,35 @@ export const createClient = ({ apiKey, timeout = 60000 }) => {
     };
 
     /**
+     * Lists the LLM models currently available to your key.
+     *
+     * Worth calling rather than hardcoding a model ID. Chutes retires and
+     * renames models, so an ID that worked last month may return
+     * 404 "model not found" today.
+     *
+     * @returns {Promise<Array<Object>>} Model entries, each with id, pricing,
+     *   context_length, max_output_length and input_modalities
+     */
+    const models = async () => {
+        const url = constructLLMUrl('/models');
+        const { signal, clear } = createTimeout();
+
+        try {
+            const response = await fetch(url, {
+                method: 'GET',
+                headers: getHeaders(),
+                signal
+            });
+
+            await handleErrors(response);
+            const body = await response.json();
+            return body.data ?? body;
+        } finally {
+            clear();
+        }
+    };
+
+    /**
      * Streaming chat completion
      * @param {Object} options
      * @param {string} options.model - Model ID
@@ -398,6 +427,7 @@ export const createClient = ({ apiKey, timeout = 60000 }) => {
         // LLM (centralized endpoint)
         chat,
         chatStream,
+        models,
         // Image (centralized endpoint)
         image,
         // Video (chutes-{model} subdomain)
